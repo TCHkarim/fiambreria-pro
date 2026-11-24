@@ -47,9 +47,9 @@ import {
   initialNotifications
 } from './initialData';
 
-const STORAGE_KEY = 'la_artesana_fiambreria_data_v1';
+export const STORAGE_KEY = 'la_artesana_fiambreria_data_v1';
 
-interface AppState {
+export interface AppState {
   currentUser: User;
   users: User[];
   empresa: ConfiguracionEmpresa;
@@ -116,6 +116,9 @@ let state: AppState = loadState();
 type Listener = (state: AppState) => void;
 const listeners = new Set<Listener>();
 
+// Gancho opcional: lo usa la sincronización con Supabase (sync.ts)
+let persistHook: (() => void) | null = null;
+
 const persist = () => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -123,10 +126,27 @@ const persist = () => {
     console.error('Error persisting state to localStorage:', e);
   }
   listeners.forEach(fn => fn(state));
+  if (persistHook) persistHook();
 };
 
 export const store = {
   getState: (): AppState => state,
+
+  // Conexión con Supabase: avisa cada vez que cambian los datos locales
+  setPersistHook: (fn: (() => void) | null) => {
+    persistHook = fn;
+  },
+
+  // Conexión con Supabase: reemplaza colecciones con los datos remotos (no dispara sincronización)
+  replaceCollections: (partial: Partial<AppState>) => {
+    state = { ...state, ...partial };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+      console.error('Error persisting state to localStorage:', e);
+    }
+    listeners.forEach(fn => fn(state));
+  },
 
   subscribe: (listener: Listener) => {
     listeners.add(listener);
